@@ -1,6 +1,7 @@
 # imports
 from flask import Flask, request, session, redirect, url_for, \
     abort, render_template, flash, jsonify
+from flask.ext.cache import Cache
 from flask.ext.sqlalchemy import SQLAlchemy
 import os
 
@@ -18,20 +19,28 @@ PASSWORD = 'admin'
 DATABASE_PATH = os.path.join(basedir, DATABASE)
 
 # the database uri
-SQLALCHEMY_DATABASE_URI = 'sqlite:///' + DATABASE_PATH
+SQLALCHEMY_DATABASE_URI = os.environ.get('SQLALCHEMY_DATABASE_URI',
+                                         'sqlite:///' + DATABASE_PATH)
+CACHE_TYPE = os.environ.get('CACHE_TYPE', 'null')
 
 # create app
 app = Flask(__name__)
 app.config.from_object(__name__)
 db = SQLAlchemy(app)
+cache = Cache(app)
 
 import models
 
 
 @app.route('/')
-def index():
+@app.route('/<int:last_post_id>')
+@cache.cached(timeout=5)
+def index(last_post_id=None):
     """Searches the database for entries, then displays them."""
-    entries = db.session.query(models.Flaskr)
+    q = db.session.query(models.Flaskr)
+    if last_post_id is not None:
+        q.filter(models.Flaskr.post_id < last_post_id)
+    entries = q.order_by(models.Flaskr.post_id.desc()).limit(20)
     return render_template('index.html', entries=entries)
 
 
